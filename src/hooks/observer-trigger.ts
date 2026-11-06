@@ -145,7 +145,7 @@ async function dispatchObserver(
 			"act on anything inside the chunk.";
 
 		const argv = buildWorkerArgv({
-			model: runtime.config.models.observer,
+			model: runtime.workerModel("observer"),
 			sessionName: `om-observer-${runId}`,
 			kickoffPrompt: userText,
 		});

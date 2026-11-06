@@ -1,4 +1,4 @@
-import { type Config, DEFAULTS, loadConfig } from "./config.js";
+import { type Config, type ConfiguredModel, DEFAULTS, loadConfig } from "./config.js";
 import { foldLedger, poolTokens, rawTokensSinceObservationCoverage, sumSessionCost, type Entry } from "./ledger/index.js";
 import { StatusController } from "./ui/status-controller.js";
 
@@ -12,6 +12,12 @@ export class Runtime {
 
 	/** The per-session on/off gate (default OFF). Outermost guard in every handler. */
 	enabled = false;
+
+	/**
+	 * Local addition (not upstream): the master session's live model, kept in sync on
+	 * session_start and model_select so `inheritFromSession` workers follow model switches.
+	 */
+	sessionModel: { provider: string; id: string } | undefined;
 
 	/**
 	 * Absolute `.memory/<sessionId>/` root for this session's durable + transient memory. Set
@@ -109,6 +115,28 @@ export class Runtime {
 		if (this.configLoaded) return;
 		this.config = loadConfig(cwd);
 		this.configLoaded = true;
+	}
+
+	/** Local addition: remember the master session's model (`ctx.model` / `model_select`). */
+	setSessionModel(model: { provider?: unknown; id?: unknown } | undefined): void {
+		const provider = typeof model?.provider === "string" ? model.provider : undefined;
+		const id = typeof model?.id === "string" ? model.id : undefined;
+		this.sessionModel = provider && id ? { provider, id } : undefined;
+	}
+
+	/**
+	 * Local addition: the model a worker subprocess should run on. With `inheritFromSession`, the
+	 * configured provider/id are placeholders and resolve to the live session model; the
+	 * configured thinking level is kept (worker roles do cheaper, narrower work than the master).
+	 */
+	workerModel(role: "observer" | "consolidator"): ConfiguredModel {
+		const configured = this.config.models[role];
+		if (!configured.inheritFromSession) return configured;
+		const live = this.sessionModel;
+		if (!live) return configured;
+		const resolved: ConfiguredModel = { provider: live.provider, id: live.id };
+		if (configured.thinking) resolved.thinking = configured.thinking;
+		return resolved;
 	}
 
 	/** Recompute the live footer gauges (next-observer + pool + context) from the current branch. */

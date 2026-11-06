@@ -7,6 +7,12 @@ export interface ConfiguredModel {
 	provider: string;
 	id: string;
 	thinking?: ModelThinkingLevel;
+	/**
+	 * Local addition (not upstream): run this worker on whatever model the master session is
+	 * currently using. `provider`/`id` then act as placeholders and are replaced at spawn time by
+	 * `Runtime.workerModel`, so workers follow in-session model switches.
+	 */
+	inheritFromSession?: boolean;
 }
 
 export interface Config {
@@ -92,6 +98,9 @@ function normalizeModel(value: unknown, fallback: ConfiguredModel): ConfiguredMo
 	const model: ConfiguredModel = { provider, id };
 	const thinking = isThinkingLevel(value.thinking) ? value.thinking : fallback.thinking;
 	if (thinking) model.thinking = thinking;
+	const inherit =
+		typeof value.inheritFromSession === "boolean" ? value.inheritFromSession : fallback.inheritFromSession;
+	if (inherit) model.inheritFromSession = true;
 	return model;
 }
 

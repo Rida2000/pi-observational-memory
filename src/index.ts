@@ -8,6 +8,9 @@
  * Ships in the global extensions folder during development, so it is gated OFF by default per
  * session (A2a). When the gate is off, every handler returns at its first line and the
  * extension is completely invisible.
+ *
+ * Local addition (not upstream): workers may inherit the live session model
+ * (`models.*.inheritFromSession`) instead of a model fixed in settings.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerCompactCommand } from "./commands/compact.js";
@@ -44,6 +47,7 @@ export default function observationalMemory(pi: ExtensionAPI): void {
 
 	pi.on("session_start", (_event: unknown, ctx: any) => {
 		runtime.ensureConfig(ctx.cwd);
+		runtime.setSessionModel(ctx.model);
 		runtime.dispatchedCoversUpToId = undefined;
 		const branch = ctx.sessionManager.getBranch() as Entry[];
 		runtime.enabled = readGateFromLedger(branch);
@@ -56,6 +60,11 @@ export default function observationalMemory(pi: ExtensionAPI): void {
 	pi.on("session_shutdown", () => {
 		runtime.status.detach();
 		runtime.abortAllWorkers();
+	});
+
+	// Local addition (not upstream): keep `inheritFromSession` workers on the live session model.
+	pi.on("model_select", (event: any) => {
+		runtime.setSessionModel(event?.model);
 	});
 
 	pi.registerCommand("om", {
