@@ -9,8 +9,10 @@
  * session (A2a). When the gate is off, every handler returns at its first line and the
  * extension is completely invisible.
  *
- * Local addition (not upstream): workers may inherit the live session model
- * (`models.*.inheritFromSession`) instead of a model fixed in settings.
+ * Local additions (not upstream): workers may inherit the live session model
+ * (`models.*.inheritFromSession`) instead of a model fixed in settings, and the compaction
+ * trigger can scale with the active model's context window (`compactAtContextRatio`) instead of
+ * a fixed token count.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerCompactCommand } from "./commands/compact.js";

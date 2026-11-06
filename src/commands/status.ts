@@ -5,6 +5,15 @@ import { estimateStringTokens } from "../tokens.js";
 import type { Runtime } from "../runtime.js";
 import { renderTimeline } from "../ui/timeline.js";
 
+/** Local patch: annotate the context gauge when the threshold is derived from the ratio. */
+function contextThresholdLabel(runtime: Runtime): string {
+	const ratio = runtime.config.compactAtContextRatio;
+	const window = runtime.sessionModel?.contextWindow;
+	return ratio !== undefined && window !== undefined && window > 0
+		? ` (ratio ${ratio} × ${window.toLocaleString()})`
+		: "";
+}
+
 export function registerStatusCommand(pi: ExtensionAPI, runtime: Runtime): void {
 	pi.registerCommand("om:status", {
 		description: "Show observational-memory status (workers, buffer, clocks)",
@@ -34,7 +43,7 @@ export function registerStatusCommand(pi: ExtensionAPI, runtime: Runtime): void 
 				`  last compaction wait: ${runtime.lastCompactionObserverWait ?? "n/a"}`,
 				`  topic files: ${topicCount}`,
 				`  journey: ${journey ? `~${estimateStringTokens(journey).toLocaleString()} / ${runtime.config.journeyTargetTokens.toLocaleString()} tok` : "none yet"}`,
-				`  context: ${contextTokens != null ? contextTokens.toLocaleString() : "?"} / ${runtime.config.compactAtContextTokens.toLocaleString()} tok`,
+				`  context: ${contextTokens != null ? contextTokens.toLocaleString() : "?"} / ${runtime.compactThresholdTokens.toLocaleString()} tok${contextThresholdLabel(runtime)}`,
 				`  session cost: $${costUsd.toFixed(4)} (${runs} run${runs === 1 ? "" : "s"})`,
 				runtime.lastWorkerError ? `  last error: ${runtime.lastWorkerError}` : `  last error: none`,
 				"",

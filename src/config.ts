@@ -8,9 +8,9 @@ export interface ConfiguredModel {
 	id: string;
 	thinking?: ModelThinkingLevel;
 	/**
-	 * Local addition (not upstream): run this worker on whatever model the master session is
-	 * currently using. `provider`/`id` then act as placeholders and are replaced at spawn time by
-	 * `Runtime.workerModel`, so workers follow in-session model switches.
+	 * Local patch (not upstream): run this worker on whatever model the master session is
+	 * currently using. `provider`/`id` then act as placeholders and are replaced at spawn time
+	 * by `Runtime.workerModel`, so workers follow in-session model switches.
 	 */
 	inheritFromSession?: boolean;
 }
@@ -26,6 +26,12 @@ export interface Config {
 	consolidateAtPoolTokens: number;
 	/** Live context-window usage that triggers compaction. */
 	compactAtContextTokens: number;
+	/**
+	 * Local patch (not upstream): when set in (0, 1), the compaction trigger is the active
+	 * model's `contextWindow` × ratio instead of the fixed `compactAtContextTokens`. The fixed
+	 * value stays as the fallback whenever the model's window is unknown.
+	 */
+	compactAtContextRatio: number | undefined;
 	/** Verbatim raw tail kept after the cutoff; snaps to a chunk boundary. */
 	tailTokens: number;
 	/**
@@ -58,6 +64,7 @@ export const DEFAULTS: Config = {
 	poolTargetTokens: 10_000,
 	consolidateAtPoolTokens: 15_000,
 	compactAtContextTokens: 150_000,
+	compactAtContextRatio: undefined,
 	tailTokens: 20_000,
 	journeyTargetTokens: 1_000,
 	observerConcurrency: 4,
@@ -77,6 +84,11 @@ const PASSIVE_ENV = "PI_OM_PASSIVE";
 
 function positiveIntegerOrUndefined(value: unknown): number | undefined {
 	return Number.isInteger(value) && typeof value === "number" && value > 0 ? value : undefined;
+}
+
+/** Local patch: percentage-style threshold, strictly between 0 and 1. */
+function validRatioOrUndefined(value: unknown): number | undefined {
+	return typeof value === "number" && Number.isFinite(value) && value > 0 && value < 1 ? value : undefined;
 }
 
 function isThinkingLevel(value: unknown): value is ModelThinkingLevel {
@@ -120,6 +132,8 @@ function normalizeSettingsConfig(value: Record<string, unknown>, base: Config): 
 		const normalizedValue = positiveIntegerOrUndefined(value[key]);
 		if (normalizedValue !== undefined) normalized[key] = normalizedValue;
 	}
+	const ratio = validRatioOrUndefined(value.compactAtContextRatio);
+	if (ratio !== undefined) normalized.compactAtContextRatio = ratio;
 	// chunkOverlapTokens may legitimately be 0.
 	if (value.chunkOverlapTokens === 0) normalized.chunkOverlapTokens = 0;
 	if (typeof value.resumeAfterMidRunCompaction === "boolean")

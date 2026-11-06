@@ -74,7 +74,9 @@ export function registerCompactionTrigger(pi: ExtensionAPI, runtime: Runtime): v
 			return;
 		}
 
-		if (!contextPressureTokens(ctx, runtime.config.compactAtContextTokens).due) return;
+		// Local patch: keep the ratio-derived threshold anchored to the live session model.
+		runtime.setSessionModel(ctx.model);
+		if (!contextPressureTokens(ctx, runtime.compactThresholdTokens).due) return;
 
 		// Capture the resume decision NOW, from this turn's event — ctx state at onComplete
 		// (post-abort, post-reload) no longer reflects whether the turn had pending tool work.

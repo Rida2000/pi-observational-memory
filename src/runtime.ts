@@ -14,10 +14,10 @@ export class Runtime {
 	enabled = false;
 
 	/**
-	 * Local addition (not upstream): the master session's live model, kept in sync on
-	 * session_start and model_select so `inheritFromSession` workers follow model switches.
+	 * Local patch (not upstream): the master session's live model, kept in sync on session_start
+	 * and model_select so `inheritFromSession` workers follow in-session model switches.
 	 */
-	sessionModel: { provider: string; id: string } | undefined;
+	sessionModel: { provider: string; id: string; contextWindow?: number } | undefined;
 
 	/**
 	 * Absolute `.memory/<sessionId>/` root for this session's durable + transient memory. Set
@@ -117,15 +117,35 @@ export class Runtime {
 		this.configLoaded = true;
 	}
 
-	/** Local addition: remember the master session's model (`ctx.model` / `model_select`). */
-	setSessionModel(model: { provider?: unknown; id?: unknown } | undefined): void {
+	/** Local patch: remember the master session's model (`ctx.model` / `model_select`). */
+	setSessionModel(model: { provider?: unknown; id?: unknown; contextWindow?: unknown } | undefined): void {
 		const provider = typeof model?.provider === "string" ? model.provider : undefined;
 		const id = typeof model?.id === "string" ? model.id : undefined;
-		this.sessionModel = provider && id ? { provider, id } : undefined;
+		if (!provider || !id) {
+			this.sessionModel = undefined;
+			return;
+		}
+		const window =
+			typeof model?.contextWindow === "number" && Number.isFinite(model.contextWindow) && model.contextWindow > 0
+				? model.contextWindow
+				: undefined;
+		this.sessionModel = window === undefined ? { provider, id } : { provider, id, contextWindow: window };
 	}
 
 	/**
-	 * Local addition: the model a worker subprocess should run on. With `inheritFromSession`, the
+	 * Local patch: the effective compaction threshold. With `compactAtContextRatio` set, it scales
+	 * with the live model's context window (0.68 × 1M = 680K, 0.68 × 200K = 136K); the fixed
+	 * `compactAtContextTokens` remains the fallback when the window is unknown.
+	 */
+	get compactThresholdTokens(): number {
+		const ratio = this.config.compactAtContextRatio;
+		const window = this.sessionModel?.contextWindow;
+		if (ratio !== undefined && window !== undefined && window > 0) return Math.max(1, Math.floor(window * ratio));
+		return this.config.compactAtContextTokens;
+	}
+
+	/**
+	 * Local patch: the model a worker subprocess should run on. With `inheritFromSession`, the
 	 * configured provider/id are placeholders and resolve to the live session model; the
 	 * configured thinking level is kept (worker roles do cheaper, narrower work than the master).
 	 */
@@ -149,7 +169,7 @@ export class Runtime {
 			poolValue: poolTokens(folded.activeObservations),
 			poolMax: this.config.consolidateAtPoolTokens,
 			ctxValue: contextTokens ?? 0,
-			ctxMax: this.config.compactAtContextTokens,
+			ctxMax: this.compactThresholdTokens,
 		});
 	}
 
